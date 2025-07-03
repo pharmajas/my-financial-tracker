@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Financial Tracker</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter for a modern look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Apply Inter font family to the entire body */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Basic styling for the root element where React app mounts */
+        #root {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Custom scrollbar for better aesthetics in dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; /* gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* gray-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <div id="root"></div>
+
+    <!-- React and ReactDOM CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Shim for 'process' object, often needed by libraries compiled for Node.js but run in browser -->
+    <script>
+        window.process = window.process || {};
+        window.process.env = window.process.env || {};
+        // Set NODE_ENV to production to use minified/optimized versions of libraries if they check this
+        window.process.env.NODE_ENV = 'production'; 
+    </script>
+
+    <!-- Chart.js v2.9.4 CDN (direct Chart.js, not react-chartjs-2) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
+
+    <!-- Babel CDN for JSX transformation in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        // Access React hooks from the global React object exposed by the CDN
+        const { useState, useEffect, useMemo, useCallback, useRef } = React; // Added useRef for canvas elements
+
+        // Access Chart.js from the global Chart object
+        const ChartJS = window.Chart; 
+
+        // Configure Chart.js global defaults for v2.x
+        if (ChartJS && ChartJS.defaults && ChartJS.defaults.global) {
+            ChartJS.defaults.global.defaultFontColor = 'white';
+            ChartJS.defaults.global.defaultFontSize = 12;
+            ChartJS.defaults.global.legend.labels.fontColor = 'white';
+        }
+
+        // --- Helper Icon Components ---
+        const EditIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>;
+        const DeleteIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+        const AddIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>;
+        const HeartIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 inline-block mr-2 text-pink-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>;
+        const LightbulbIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" clipRule="evenodd" /></svg>;
+        const ResetIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block ml-1 text-gray-400 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l16 16" /></svg>;
+
+        // --- Initial Data Structure ---
+        const initialData = {
+            accounts: { cibc: { name: 'CIBC Chequing', balance: 5000 }, rbc: { name: 'RBC Chequing', balance: 8000 } },
+            creditCards: { rbcAvion: { name: 'RBC Avion', balance: 1200, limit: 15000, points: 0 }, amex: { name: 'Amex Cobalt', balance: 2500, limit: 20000, points: 140000 }, mbna: { name: 'Amazon MBNA', balance: 800, limit: 10000, points: 0 } },
+            income: { basePay: { name: 'Base Pay', value: 160000 }, bonus: { name: 'Bonus', value: 0.30 }, rental1: { name: 'Rental Income 1', value: 1100 }, rental2: { name: 'Rental Income 2', value: 1800 }, spousalSupport: { name: 'Spousal Support', schedule: [{ endDate: '2025-09-01', amount: 2700 }, { endDate: '2026-09-01', amount: 2400 }, { endDate: '2027-09-01', amount: 2100 }] }, childSupport: { name: 'Child Support', children: [{ name: 'Son', amount: 1250, supportEndDate: '2031-12-31' }, { name: 'Daughter', amount: 1250, supportEndDate: '2034-12-31' }] } },
+            investments: { rbcInvest: { name: 'RBC Investments', value: 1462059 }, realEstate: { name: 'Real Estate Equity', value: 2108015 }, lifeInsurance: { name: 'Whole Life Cash Value', value: 35000, premium: 35000 } },
+            debts: { mortgage: { name: 'Mortgage', balance: 1600000, payment: 5500 }, carLoan: { name: 'Car Loan', balance: 25000, payment: 650 }, margin: { name: 'Margin Loan', balance: 50000, payment: 200 } },
+            subscriptions: [{ name: 'Rogers Bundle (Phone/HW/Internet)', cost: 395, category: 'Utilities' }, { name: 'Fido (2 Kid Phones)', cost: 120, category: 'Utilities' }, { name: 'Netflix', cost: 16.99, category: 'Entertainment' }, { name: 'Amazon Prime', cost: 9.99, category: 'Shopping' }, { name: 'Gym Membership', cost: 50, category: 'Health' }],
+            growthRates: { investment: 0.07, salary: 0.03, rental: 0.025, inflation: 0.025, taxRate: 0.32 },
+            retirementScenario: { age: 46, semiRetireAge: 55, partTimeIncome: 60000, fullPensionAt65: 20000, pensionStartAge: 65, annualContribution: 0 },
+            withdrawalScenario: { amount: 50000, bonusAssumption: 0.30, additionalSavings: 0, investmentRate: 0.07, inflationRate: 0.025 },
+            transactions: [],
+            includeBonus: true,
+            overrides: { netWorth: null, netCashFlow: null },
+            activeTab: 'dashboard',
+            isSupportEditorOpen: false, 
+            editingSupportType: null, 
+            isAnalysisModalOpen: false
+        };
+
+        // --- Custom Alert/Message Modal Component ---
+        const MessageModal = ({ message, onClose }) => {
+            return (
+                <div className="fixed inset-0 bg-black/70 z-50 flex justify-center items-center p-4">
+                    <div className="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center">
+                        <h3 className="text-xl font-bold text-red-400 mb-4">Warning!</h3>
+                        <p className="text-white mb-6">{message}</p>
+                        <button
+                            onClick={onClose}
+                            className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200"
+                        >
+                            Got It
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Editable Field Component ---
+        const EditableField = ({ value, onSave, isNumeric = true, formatAsCurrency = true, type = "text" }) => {
+            const [isEditing, setIsEditing] = useState(false);
+            const [currentValue, setCurrentValue] = useState(value);
+
+            useEffect(() => {
+                setCurrentValue(value);
+            }, [value]);
+
+            const handleSave = () => {
+                const newValue = isNumeric ? parseFloat(currentValue) || 0 : currentValue;
+                onSave(newValue);
+                setIsEditing(false);
+            };
+
+            const displayValue = () => {
+                if (formatAsCurrency && typeof value === 'number') {
+                    return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                }
+                return value;
+            };
+
+            if (isEditing) {
+                return (
+                    <input
+                        type={isNumeric ? "number" : type}
+                        className="bg-gray-600 text-white p-1 rounded-md w-full text-right"
+                        value={currentValue}
+                        onChange={(e) => setCurrentValue(e.target.value)}
+                        onBlur={handleSave}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                        autoFocus
+                    />
+                );
+            }
+
+            return (
+                <span onClick={() => setIsEditing(true)} className="cursor-pointer hover:bg-gray-600 p-1 rounded-md">
+                    {displayValue()}
+                </span>
+            );
+        };
+
+        // --- Editable Calculated Field Component ---
+        const EditableCalculatedField = ({ calculatedValue, overrideValue, onOverride, onReset, formatAsCurrency = true }) => {
+            const displayValue = overrideValue !== null ? overrideValue : calculatedValue;
+            const isOverridden = overrideValue !== null;
+
+            return (
+                <div className={`flex items-center justify-center ${isOverridden ? 'bg-blue-900/50 rounded-md p-1' : ''}`}>
+                    <EditableField value={displayValue} onSave={onOverride} formatAsCurrency={formatAsCurrency} />
+                    {isOverridden && (
+                        <button onClick={onReset} title="Reset to calculated value" className="ml-1">
+                            <ResetIcon />
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Editable Percentage Component ---
+        const EditablePercentage = ({ value, onSave }) => {
+            const [isEditing, setIsEditing] = useState(false);
+            const [currentValue, setCurrentValue] = useState((value || 0) * 100);
+
+            useEffect(() => {
+                setCurrentValue((value || 0) * 100);
+            }, [value]);
+
+            const handleSave = () => {
+                const newValue = parseFloat(currentValue) || 0;
+                onSave(newValue / 100);
+                setIsEditing(false);
+            };
+
+            if (isEditing) {
+                return (
+                    <div className="flex items-center">
+                        <input
+                            type="number"
+                            className="bg-gray-600 text-white p-1 rounded-md w-20 text-right"
+                            value={currentValue}
+                            onChange={(e) => setCurrentValue(e.target.value)}
+                            onBlur={handleSave}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                            autoFocus
+                        />
+                        <span className="ml-1">%</span>
+                    </div>
+                );
+            }
+
+            return (
+                <span onClick={() => setIsEditing(true)} className="cursor-pointer hover:bg-gray-600 p-1 rounded-md">
+                    {((value || 0) * 100).toFixed(1)}%
+                </span>
+            );
+        };
+
+        // --- Helper Functions for Complex Income Calculations ---
+        const getSpousalSupport = (date, schedule) => {
+            if (!Array.isArray(schedule)) { return 0; }
+            const currentDate = new Date(date);
+            for (const period of schedule) {
+                if (currentDate <= new Date(period.endDate)) {
+                    return period.amount;
+                }
+            }
+            return 0;
+        };
+
+        const getChildSupport = (date, children) => {
+            if (!Array.isArray(children)) { return 0; }
+            const currentDate = new Date(date);
+            let totalSupport = 0;
+            for (const child of children) {
+                if (currentDate <= new Date(child.supportEndDate)) {
+                    totalSupport += child.amount;
+                }
+            }
+            return totalSupport;
+        };
+
+        // --- Main Application Content Component ---
+        const AppContent = ({ appData, setAppData }) => {
+            const {
+                activeTab, transactions, accounts, creditCards, income, investments, debts, subscriptions,
+                growthRates, retirementScenario, withdrawalScenario, includeBonus, overrides,
+                isSupportEditorOpen, editingSupportType, isAnalysisModalOpen
+            } = appData;
+
+            const handleUpdate = useCallback((key, value) => {
+                setAppData(prev => ({ ...prev, [key]: value }));
+            }, [setAppData]);
+            
+            const handleNestedUpdate = useCallback((topKey, nestedKey, field, value) => {
+                setAppData(prev => {
+                    const newTopValue = {
+                        ...prev[topKey],
+                        [nestedKey]: {
+                            ...prev[topKey][nestedKey],
+                            [field]: value
+                        }
+                    };
+                    return { ...prev, [topKey]: newTopValue };
+                });
+                if (topKey === 'investments' || topKey === 'debts') {
+                    handleResetOverride('netWorth');
+                }
+            }, [setAppData]);
+            
+            const handleOverride = useCallback((key, value) => {
+                handleUpdate('overrides', { ...overrides, [key]: value });
+            }, [overrides, handleUpdate]);
+            
+            const handleResetOverride = useCallback((key) => {
+                handleUpdate('overrides', { ...overrides, [key]: null });
+            }, [overrides, handleUpdate]);
+
+            const handleListUpdate = useCallback((listKey, index, field, value) => {
+                setAppData(prev => {
+                    const newList = [...prev[listKey]];
+                    newList[index] = { ...newList[index], [field]: value };
+                    return { ...prev, [listKey]: newList };
+                });
+            }, [setAppData]);
+            
+            const handleDeleteListItem = useCallback((listKey, index) => {
+                setAppData(prev => ({
+                    ...prev,
+                    [listKey]: prev[listKey].filter((_, i) => i !== index)
+                }));
+            }, [setAppData]);
+
+            const handleAddListItem = useCallback((listKey, newItem) => {
+                setAppData(prev => ({
+                    ...prev,
+                    [listKey]: [...(prev[listKey] || []), newItem]
+                }));
+            }, [setAppData]);
+
+            const handleOpenSupportEditor = useCallback((type) => {
+                handleUpdate('editingSupportType', type);
+                handleUpdate('isSupportEditorOpen', true);
+            }, [handleUpdate]);
+            
+            const handleSaveSupport = useCallback((type, data) => {
+                handleUpdate('income', {
+                    ...income,
+                    [type]: { ...income[type], ...data }
+                });
+                handleUpdate('isSupportEditorOpen', false);
+            }, [income, handleUpdate]);
+
+            const totalMonthlyPreTaxIncome = useMemo(() => {
+                if (!income) return 0;
+                const base = (income.basePay?.value || 0) / 12;
+                const bonus = includeBonus ? ((income.basePay?.value || 0) * (income.bonus?.value || 0)) / 12 : 0;
+                const rental1 = income.rental1?.value || 0;
+                const rental2 = income.rental2?.value || 0;
+                const spousal = getSpousalSupport(new Date(), income.spousalSupport?.schedule || []);
+                const child = getChildSupport(new Date(), income.childSupport?.children || []);
+                return base + bonus + rental1 + rental2 + spousal + child;
+            }, [income, includeBonus]);
+            
+            const totalMonthlyAfterTaxIncome = useMemo(() => {
+                if (!growthRates) return 0;
+                return totalMonthlyPreTaxIncome * (1 - (growthRates.taxRate || 0));
+            }, [totalMonthlyPreTaxIncome, growthRates.taxRate]);
+
+            const totalMonthlyExpenses = useMemo(() => {
+                if (!debts || !subscriptions) return 0;
+                const recurring = Object.values(debts).reduce((sum, debt) => sum + (debt.payment || 0), 0);
+                const subscriptionTotal = (subscriptions || []).reduce((sum, sub) => sum + (sub.cost || 0), 0);
+                return recurring + subscriptionTotal;
+            }, [debts, subscriptions]);
+
+            const calculatedNetWorth = useMemo(() => {
+                if (!investments || !debts) return 0;
+                const totalAssets = Object.values(investments).reduce((sum, inv) => sum + (inv.value || 0), 0);
+                const totalDebts = Object.values(debts).reduce((sum, debt) => sum + (debt.balance || 0), 0);
+                return totalAssets - totalDebts;
+            }, [investments, debts]);
+
+            const calculatedNetCashFlow = totalMonthlyAfterTaxIncome - totalMonthlyExpenses;
+            
+            const netWorth = overrides.netWorth !== null ? overrides.netWorth : calculatedNetWorth;
+            const netCashFlow = overrides.netCashFlow !== null ? overrides.netCashFlow : calculatedNetCashFlow;
+
+            const renderContent = () => {
+                switch (activeTab) {
+                    case 'dashboard':
+                        return <Dashboard
+                            income={income}
+                            totalMonthlyAfterTaxIncome={totalMonthlyAfterTaxIncome}
+                            totalMonthlyExpenses={totalMonthlyExpenses}
+                            netWorth={netWorth}
+                            calculatedNetWorth={calculatedNetWorth}
+                            netCashFlow={netCashFlow}
+                            calculatedNetCashFlow={calculatedNetCashFlow}
+                            overrides={overrides}
+                            investments={investments}
+                            debts={debts}
+                            subscriptions={subscriptions}
+                            growthRates={growthRates}
+                            includeBonus={includeBonus}
+                            setIncludeBonus={(val) => handleUpdate('includeBonus', val)}
+                            onIncomeUpdate={handleNestedUpdate}
+                            onDebtUpdate={handleNestedUpdate}
+                            onInvestmentUpdate={handleNestedUpdate}
+                            onGrowthUpdate={(key, val) => handleUpdate('growthRates', {...growthRates, [key]: val})}
+                            onOverride={handleOverride}
+                            onResetOverride={handleResetOverride}
+                            onOpenSupportEditor={handleOpenSupportEditor}
+                        />;
+                    case 'transactions':
+                        return <TransactionTracker
+                            transactions={transactions}
+                            onTransactionsChange={(val) => handleUpdate('transactions', val)}
+                            accounts={accounts}
+                            onAccountUpdate={handleNestedUpdate}
+                            creditCards={creditCards}
+                            onCreditCardUpdate={handleNestedUpdate}
+                            onOpenAnalysis={() => handleUpdate('isAnalysisModalOpen', true)}
+                        />;
+                    case 'subscriptions':
+                        return <SubscriptionTracker 
+                            subscriptions={subscriptions} 
+                            onUpdate={(...args) => handleListUpdate('subscriptions', ...args)}
+                            onDelete={(...args) => handleDeleteListItem('subscriptions', ...args)}
+                            onAdd={(item) => handleAddListItem('subscriptions', item)}
+                        />;
+                    case 'ai-analysis':
+                        return <AIAnalysis 
+                            netWorth={netWorth}
+                            investments={investments}
+                        />;
+                    case 'what-if':
+                        return <WhatIfAnalysis
+                            scenario={withdrawalScenario}
+                            onScenarioUpdate={(key, val) => handleUpdate('withdrawalScenario', {...withdrawalScenario, [key]: val})}
+                            netWorth={netWorth}
+                            investments={investments}
+                            growthRates={growthRates}
+                            retirementScenario={retirementScenario}
+                            income={income}
+                            totalMonthlyExpenses={totalMonthlyExpenses}
+                        />;
+                    case 'retirement':
+                        return <RetirementPlanner
+                            scenario={retirementScenario}
+                            onScenarioUpdate={(key, val) => handleUpdate('retirementScenario', {...retirementScenario, [key]: val})}
+                            netWorth={netWorth}
+                            growthRates={growthRates}
+                            income={income}
+                            totalMonthlyExpenses={totalMonthlyExpenses}
+                            includeBonus={includeBonus}
+                        />;
+                    default:
+                        return <div>Select a tab</div>;
+                }
+            };
+
+            const tabs = [
+                { id: 'dashboard', label: 'Dashboard' },
+                { id: 'transactions', label: 'Transactions' },
+                { id: 'subscriptions', label: 'Subscriptions' },
+                { id: 'ai-analysis', label: 'AI Analysis' },
+                { id: 'what-if', label: 'What-If Scenarios' },
+                { id: 'retirement', label: 'Retirement Plan' },
+            ];
+
+            return (
+                <div className="bg-gray-900 text-white min-h-screen font-sans p-4 md:p-6">
+                    {isSupportEditorOpen && (
+                        <SupportEditor
+                            type={editingSupportType}
+                            data={income[editingSupportType]}
+                            onSave={handleSaveSupport}
+                            onClose={() => handleUpdate('isSupportEditorOpen', false)}
+                        />
+                    )}
+                    {isAnalysisModalOpen && (
+                        <MonthlyAnalysisModal
+                            transactions={transactions}
+                            onClose={() => handleUpdate('isAnalysisModalOpen', false)}
+                        />
+                    )}
+                    <div className="max-w-7xl mx-auto">
+                        <header className="mb-6">
+                            <h1 className="text-3xl md:text-4xl font-bold text-cyan-400">Comprehensive Financial Tracker</h1>
+                            <p className="text-gray-400 mt-1">Your personalized dashboard for financial clarity and retirement planning.</p>
+                        </header>
+
+                        <div className="flex flex-col md:flex-row md:space-x-6">
+                            <nav className="md:w-1/5 mb-6 md:mb-0">
+                                <ul className="space-y-2">
+                                   {tabs.map(tab => (
+                                        <li key={tab.id}>
+                                            <button
+                                                onClick={() => handleUpdate('activeTab', tab.id)}
+                                                className={`w-full text-left px-4 py-2 rounded-lg transition-all duration-200 ${activeTab === tab.id ? 'bg-cyan-500 text-white font-semibold shadow-lg' : 'bg-gray-800 hover:bg-gray-700 hover:text-cyan-300'}`}
+                                            >
+                                                {tab.label}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </nav>
+
+                            <main className="md:w-4/5">
+                                <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl">
+                                    {renderContent()}
+                                </div>
+                            </main>
+                        </div>
+                           <footer className="text-center text-gray-500 mt-8 text-sm">
+                            <p>Financial data is stored locally in your browser. Nothing is sent to a server.</p>
+                            <p>&copy; 2025 Financial Clarity Inc. Version 11.0</p>
+                        </footer>
+                    </div>
+                </div>
+            )
+        };
+
+        // --- Main App Component ---
+        const App = () => {
+            const [isLoading, setIsLoading] = useState(true);
+            const [appData, setAppData] = useState(null);
+
+            useEffect(() => {
+                try {
+                    const savedData = localStorage.getItem('financialTrackerDataV11');
+                    if (savedData) {
+                        setAppData(JSON.parse(savedData));
+                    } else {
+                        setAppData(initialData);
+                    }
+                } catch (error) {
+                    console.error("Failed to load data from localStorage, resetting to default.", error);
+                    setAppData(initialData);
+                }
+                setIsLoading(false);
+            }, []);
+
+            useEffect(() => {
+                if (appData && !isLoading) {
+                    try {
+                        localStorage.setItem('financialTrackerDataV11', JSON.stringify(appData));
+                    } catch (error) {
+                        console.error("Failed to save data to localStorage", error);
+                    }
+                }
+            }, [appData, isLoading]);
+
+            if (isLoading) {
+                return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center"><p>Loading Financial Tracker...</p></div>;
+            }
+
+            return <AppContent appData={appData} setAppData={setAppData} />;
+        };
+
+        // --- Child Components Definition ---
+
+        // Dashboard Component: Displays financial overview, cash flow details, rates, assets, debts, and expense distribution.
+        const Dashboard = ({ income, totalMonthlyAfterTaxIncome, totalMonthlyExpenses, netWorth, calculatedNetWorth, netCashFlow, calculatedNetCashFlow, overrides, investments, debts, subscriptions, growthRates, includeBonus, setIncludeBonus, onIncomeUpdate, onDebtUpdate, onInvestmentUpdate, onGrowthUpdate, onOverride, onResetOverride, onOpenSupportEditor }) => {
+            // Ref for the canvas element
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null); // To store the Chart.js instance
+
+            // Data for the Pie chart showing monthly expense distribution
+            const spendingData = useMemo(() => ({
+                labels: [...Object.values(debts).map(d => d.name), 'Subscriptions'],
+                datasets: [{
+                    data: [...Object.values(debts).map(d => d.payment), (subscriptions || []).reduce((sum, s) => sum + s.cost, 0)],
+                    backgroundColor: ['#4ade80', '#facc15', '#fb923c', '#f87171', '#60a5fa', '#c084fc'], // Tailwind colors
+                    borderColor: '#1f2937', // Gray-800 for border
+                    borderWidth: 2,
+                }],
+            }), [debts, subscriptions]);
+
+            // Chart options for consistent styling
+            const chartOptions = useMemo(() => ({
+                responsive: true,
+                maintainAspectRatio: false,
+                legend: {
+                    position: 'right',
+                    labels: {
+                        fontColor: 'white'
+                    }
+                },
+                tooltips: {
+                    callbacks: {
+                        label: function(tooltipItem, data) {
+                            const label = data.labels[tooltipItem.index] || '';
+                            const value = data.datasets[0].data[tooltipItem.index];
+                            return `${label}: ${value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`;
+                        }
+                    }
+                }
+            }), []);
+
+            // Effect to create/update the chart
+            useEffect(() => {
+                if (chartRef.current) {
+                    // Destroy existing chart instance if it exists
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+                    // Create new chart instance
+                    chartInstance.current = new ChartJS(chartRef.current, {
+                        type: 'pie',
+                        data: spendingData,
+                        options: chartOptions,
+                    });
+                }
+                // Cleanup function to destroy chart on component unmount
+                return () => {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                        chartInstance.current = null;
+                    }
+                };
+            }, [spendingData, chartOptions]);
+
+
+            return (
+                <d
